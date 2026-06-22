@@ -7,6 +7,7 @@ import com.orderprocessing.entity.Order
 import com.orderprocessing.entity.OrderItem
 import com.orderprocessing.entity.OrderStatus
 import com.orderprocessing.exception.ResourceNotFoundException
+import com.orderprocessing.exception.InsufficientStockException
 import com.orderprocessing.repository.OrderRepository
 import com.orderprocessing.repository.ProductRepository
 import org.springframework.data.domain.Page
@@ -21,7 +22,8 @@ import java.util.UUID
 @Service
 class OrderService(
         private val orderRepository: OrderRepository,
-        private val productRepository: ProductRepository
+        private val productRepository: ProductRepository,
+        private val stockService: StockService
 ) {
 
     @Transactional
@@ -63,9 +65,15 @@ class OrderService(
 
         // --- Placeholder: VALIDATING step (real logic comes in 2.6) ---
         updateOrderStatus(orderId, OrderStatus.VALIDATING)
-        Thread.sleep(1000)
+        try {
+            stockService.reserveStock(orderId)
+        } catch (e: InsufficientStockException) {
+            updateOrderStatus(orderId, OrderStatus.FAILED)
+            println("[$threadName] Order $orderId failed: ${e.message}")
+            return
+        }
         updateOrderStatus(orderId, OrderStatus.VALIDATED)
-        println("[$threadName] Order $orderId validated")
+        println("[$threadName] Order $orderId validated, stock reserved")
 
         // --- Placeholder: PAYMENT_PROCESSING step (real logic comes in 2.5) ---
         updateOrderStatus(orderId, OrderStatus.PAYMENT_PROCESSING)
