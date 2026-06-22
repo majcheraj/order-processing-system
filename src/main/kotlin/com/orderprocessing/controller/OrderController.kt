@@ -26,7 +26,8 @@ class OrderController(
     @PostMapping
     fun createOrder(@Valid @RequestBody request: CreateOrderRequest): ResponseEntity<OrderResponse> {
         val response = orderService.createOrder(request)
-        return ResponseEntity.status(HttpStatus.CREATED).body(response)
+        orderService.processOrderAsync(response.id)
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response)
     }
 
     @GetMapping("/{id}")

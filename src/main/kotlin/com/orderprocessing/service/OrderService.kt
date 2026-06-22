@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.scheduling.annotation.Async
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -53,6 +54,39 @@ class OrderService(
 
         val saved = orderRepository.save(order)
         return saved.toResponse()
+    }
+
+    @Async("orderProcessingExecutor")
+    fun processOrderAsync(orderId: UUID) {
+        val threadName = Thread.currentThread().name
+        println("[$threadName] Starting background processing for order $orderId")
+
+        // --- Placeholder: VALIDATING step (real logic comes in 2.6) ---
+        updateOrderStatus(orderId, OrderStatus.VALIDATING)
+        Thread.sleep(1000)
+        updateOrderStatus(orderId, OrderStatus.VALIDATED)
+        println("[$threadName] Order $orderId validated")
+
+        // --- Placeholder: PAYMENT_PROCESSING step (real logic comes in 2.5) ---
+        updateOrderStatus(orderId, OrderStatus.PAYMENT_PROCESSING)
+        Thread.sleep(1000)
+        updateOrderStatus(orderId, OrderStatus.PAID)
+        println("[$threadName] Order $orderId paid")
+
+        // --- Placeholder: FULFILLMENT step (real logic comes in 2.7) ---
+        updateOrderStatus(orderId, OrderStatus.FULFILLMENT)
+        Thread.sleep(1000)
+        updateOrderStatus(orderId, OrderStatus.SHIPPED)
+        println("[$threadName] Order $orderId shipped")
+    }
+
+    @Transactional
+    fun updateOrderStatus(orderId: UUID, newStatus: OrderStatus) {
+        val order = orderRepository.findById(orderId)
+                .orElseThrow { ResourceNotFoundException("Order with id $orderId not found") }
+        order.status = newStatus
+        order.updatedAt = Instant.now()
+        orderRepository.save(order)
     }
 
     @Transactional(readOnly = true)
