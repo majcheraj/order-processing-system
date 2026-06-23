@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.scheduling.annotation.Async
 import org.springframework.orm.ObjectOptimisticLockingFailureException
+import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -31,6 +32,10 @@ class OrderService(
         private val validationService: ValidationService,
         private val fulfillmentService: FulfillmentService
 ) {
+
+    companion object {
+        private val log = LoggerFactory.getLogger(OrderService::class.java)
+    }
 
     @Transactional
     fun createOrder(request: CreateOrderRequest): OrderResponse {
@@ -67,7 +72,7 @@ class OrderService(
     @Async("orderProcessingExecutor")
     fun processOrderAsync(orderId: UUID) {
         val threadName = Thread.currentThread().name
-        println("[$threadName] Starting background processing for order $orderId")
+        log.info("[{}] Starting background processing for order {}", threadName, orderId)
 
         // --- Placeholder: VALIDATING step (real logic comes in 2.6) ---
         updateOrderStatusWithRetry(orderId, OrderStatus.VALIDATING)
@@ -75,7 +80,7 @@ class OrderService(
             validationService.validateOrder(orderId)
         } catch (e: Exception) {
             updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
-            println("[$threadName] Order $orderId validation failed: ${e.message}")
+            log.error("[{}] Order {} validation failed: {}", threadName, orderId, e.message)
             return
         }
 
@@ -83,26 +88,26 @@ class OrderService(
             stockService.reserveStock(orderId)
         } catch (e: InsufficientStockException) {
             updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
-            println("[$threadName] Order $orderId failed: ${e.message}")
+            log.error("[{}] Order {} insufficient stock: {}", threadName, orderId, e.message)
             return
         }
         updateOrderStatusWithRetry(orderId, OrderStatus.VALIDATED)
-        println("[$threadName] Order $orderId validated, stock reserved")
+        log.info("[{}] Order {} validated, stock reserved", threadName, orderId)
 
         // --- Step: PAYMENT_PROCESSING — throttled via Semaphore ---
         updateOrderStatusWithRetry(orderId, OrderStatus.PAYMENT_PROCESSING)
         val paymentSuccess = paymentGatewayService.processPayment(orderId)
         if (!paymentSuccess) {
             updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
-            println("[$threadName] Order $orderId payment failed")
+            log.error("[{}] Order {} payment failed", threadName, orderId)
             return
         }
         updateOrderStatusWithRetry(orderId, OrderStatus.PAID)
-        println("[$threadName] Order $orderId paid")
+        log.info("[{}] Order {} paid", threadName, orderId)
 
         // --- Step: FULFILLMENT — submit to BlockingQueue pipeline ---
         fulfillmentService.submitForFulfillment(orderId)
-        println("[$threadName] Order $orderId submitted to fulfillment pipeline")
+        log.info("[{}] Order {} submitted to fulfillment pipeline", threadName, orderId)
     }
 
     @Transactional
@@ -123,8 +128,8 @@ class OrderService(
                 return
             } catch (e: ObjectOptimisticLockingFailureException) {
                 attempt++
-                println("[${Thread.currentThread().name}] Optimistic lock conflict on order $orderId " +
-                        "status update to $newStatus, attempt $attempt of $maxRetries")
+                log.warn("[{}] Optimistic lock conflict on order {} status update to {}, attempt {} of {}",
+                        Thread.currentThread().name, orderId, newStatus, attempt, maxRetries)
                 if (attempt >= maxRetries) {
                     throw e
                 }

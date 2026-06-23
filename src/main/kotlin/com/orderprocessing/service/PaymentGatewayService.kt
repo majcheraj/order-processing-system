@@ -1,5 +1,6 @@
 package com.orderprocessing.service
 
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
 import java.util.concurrent.Semaphore
@@ -11,15 +12,19 @@ class PaymentGatewayService {
     // Max 5 concurrent payment calls allowed
     private val semaphore = Semaphore(5, true)
 
+    companion object {
+        private val log = LoggerFactory.getLogger(PaymentGatewayService::class.java)
+    }
+
     fun processPayment(orderId: UUID): Boolean {
         val threadName = Thread.currentThread().name
-        println("[$threadName] Waiting for payment gateway permit for order $orderId, " +
-                "available permits: ${semaphore.availablePermits()}")
+        log.info("[{}] Waiting for payment gateway permit for order {}, available permits: {}",
+                threadName, orderId, semaphore.availablePermits())
 
         semaphore.acquire()
         try {
-            println("[$threadName] Payment gateway permit acquired for order $orderId, " +
-                    "available permits: ${semaphore.availablePermits()}")
+            log.info("[{}] Payment gateway permit acquired for order {}, available permits: {}",
+                    threadName, orderId, semaphore.availablePermits())
 
             // Simulate payment gateway call (1-3 seconds)
             val delay = Random.nextLong(1000, 3000)
@@ -27,14 +32,16 @@ class PaymentGatewayService {
 
             // Simulate 90% success rate
             val success = Random.nextDouble() < 0.9
-            println("[$threadName] Payment ${if (success) "succeeded" else "failed"} " +
-                    "for order $orderId after ${delay}ms")
+            log.info("[{}] Payment {} for order {} after {}ms",
+                    threadName, if (success) "succeeded" else "failed", orderId, delay)
             return success
 
         } finally {
             semaphore.release()
-            println("[$threadName] Payment gateway permit released for order $orderId, " +
-                    "available permits: ${semaphore.availablePermits()}")
+            log.info("[{}] Payment gateway permit released for order {}, available permits: {}",
+                    threadName, orderId, semaphore.availablePermits())
         }
     }
+
+    fun availablePermits(): Int = semaphore.availablePermits()
 }

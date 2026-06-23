@@ -11,7 +11,7 @@ import java.util.concurrent.Executor
 class AsyncConfig {
 
     @Bean(name = ["orderProcessingExecutor"])
-    fun orderProcessingExecutor(): Executor {
+    fun orderProcessingExecutor(): ThreadPoolTaskExecutor  {
         val executor = ThreadPoolTaskExecutor()
         executor.corePoolSize = 4
         executor.maxPoolSize = 8

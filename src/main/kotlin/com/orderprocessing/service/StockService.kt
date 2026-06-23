@@ -5,6 +5,7 @@ import com.orderprocessing.exception.InsufficientStockException
 import com.orderprocessing.exception.ResourceNotFoundException
 import com.orderprocessing.repository.OrderRepository
 import com.orderprocessing.repository.ProductRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -14,6 +15,9 @@ class StockService(
         private val orderRepository: OrderRepository,
         private val productRepository: ProductRepository
 ) {
+    companion object {
+        private val log = LoggerFactory.getLogger(StockService::class.java)
+    }
 
     @Transactional
     fun reserveStock(orderId: UUID) {
@@ -36,8 +40,8 @@ class StockService(
 
             product.stockQuantity -= item.quantity
             productRepository.save(product)
-            println("[${Thread.currentThread().name}] Reserved ${item.quantity} units of '${product.name}', " +
-                    "remaining stock: ${product.stockQuantity}")
+            log.info("[{}] Reserved {} units of '{}', remaining stock: {}",
+                    Thread.currentThread().name, item.quantity, product.name, product.stockQuantity)
         }
     }
 }

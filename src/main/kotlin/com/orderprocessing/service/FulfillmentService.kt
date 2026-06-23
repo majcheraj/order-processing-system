@@ -6,6 +6,7 @@ import com.orderprocessing.repository.OrderRepository
 import com.orderprocessing.cache.OrderStatusCache
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -19,6 +20,10 @@ class FulfillmentService(
         private val orderStatusCache: OrderStatusCache
 ) {
 
+    companion object {
+        private val log = LoggerFactory.getLogger(FulfillmentService::class.java)
+    }
+
     private val fulfillmentQueue = LinkedBlockingQueue<UUID>(100)
     private val running = AtomicBoolean(true)
     private val workers = mutableListOf<Thread>()
@@ -28,49 +33,51 @@ class FulfillmentService(
     fun startWorkers() {
         repeat(workerCount) { index ->
             val worker = Thread({
-                println("[warehouse-worker-$index] Started, waiting for orders...")
+                log.info("[warehouse-worker-{}] Started, waiting for orders...", index)
                 while (running.get()) {
                     val orderId = fulfillmentQueue.poll(1, TimeUnit.SECONDS)
                     if (orderId != null) {
                         processfulfillment(orderId, index)
                     }
                 }
-                println("[warehouse-worker-$index] Shutting down")
+                log.info("[warehouse-worker-{}] Shutting down", index)
             }, "warehouse-worker-$index")
             worker.isDaemon = true
             workers.add(worker)
             worker.start()
         }
-        println("[main] Started $workerCount warehouse workers")
+        log.info("[main] Started {} warehouse workers", workerCount)
     }
 
     @PreDestroy
     fun stopWorkers() {
-        println("[main] Stopping warehouse workers...")
+        log.info("[main] Stopping warehouse workers...")
         running.set(false)
         workers.forEach { it.join(2000) }
-        println("[main] All warehouse workers stopped")
+        log.info("[main] All warehouse workers stopped")
     }
 
     fun submitForFulfillment(orderId: UUID) {
         val queued = fulfillmentQueue.offer(orderId, 5, TimeUnit.SECONDS)
         if (!queued) {
-            println("[${Thread.currentThread().name}] WARNING: Fulfillment queue full, order $orderId dropped!")
+            log.warn("[{}] Fulfillment queue full, order {} dropped!",
+                    Thread.currentThread().name, orderId)
         } else {
-            println("[${Thread.currentThread().name}] Order $orderId submitted to fulfillment queue, " +
-                    "queue size: ${fulfillmentQueue.size}")
+            log.info("[{}] Order {} submitted to fulfillment queue, queue size: {}",
+                    Thread.currentThread().name, orderId, fulfillmentQueue.size)
         }
     }
 
     private fun processfulfillment(orderId: UUID, workerIndex: Int) {
-        println("[warehouse-worker-$workerIndex] Processing fulfillment for order $orderId")
+        log.info("[warehouse-worker-{}] Processing fulfillment for order {}", workerIndex, orderId)
         try {
             updateStatus(orderId, OrderStatus.FULFILLMENT)
-            Thread.sleep(1500) // simulate packing
+            Thread.sleep(1500)
             updateStatus(orderId, OrderStatus.SHIPPED)
-            println("[warehouse-worker-$workerIndex] Order $orderId shipped!")
+            log.info("[warehouse-worker-{}] Order {} shipped!", workerIndex, orderId)
         } catch (e: Exception) {
-            println("[warehouse-worker-$workerIndex] Error processing order $orderId: ${e.message}")
+            log.error("[warehouse-worker-{}] Error processing order {}: {}",
+                    workerIndex, orderId, e.message)
         }
     }
 
@@ -82,4 +89,7 @@ class FulfillmentService(
         orderRepository.save(order)
         orderStatusCache.update(orderId, status)
     }
+
+    fun queueSize(): Int = fulfillmentQueue.size
+    fun queueRemainingCapacity(): Int = fulfillmentQueue.remainingCapacity()
 }

@@ -5,6 +5,7 @@ import com.orderprocessing.exception.InsufficientStockException
 import com.orderprocessing.exception.ResourceNotFoundException
 import com.orderprocessing.repository.OrderRepository
 import com.orderprocessing.repository.ProductRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -19,6 +20,10 @@ class ValidationService(
         private val orderRepository: OrderRepository,
         private val productRepository: ProductRepository
 ) {
+
+    companion object {
+        private val log = LoggerFactory.getLogger(ValidationService::class.java)
+    }
 
     private val validationExecutor = ThreadPoolExecutor(
             3,                          // corePoolSize
@@ -40,9 +45,9 @@ class ValidationService(
         // Check 1: Stock availability
         validationExecutor.submit {
             try {
-                println("[$threadName → validation-thread] Checking stock for order $orderId")
+                log.info("[{} → validation-thread] Checking stock for order {}", threadName, orderId)
                 checkStockAvailability(order)
-                println("[$threadName → validation-thread] Stock check passed for order $orderId")
+                log.info("[{} → validation-thread] Stock check passed for order {}", threadName, orderId)
             } catch (e: Exception) {
                 failed.set(true)
                 failureReason.set("Stock check failed: ${e.message}")
@@ -54,9 +59,9 @@ class ValidationService(
         // Check 2: Customer eligibility
         validationExecutor.submit {
             try {
-                println("[$threadName → validation-thread] Checking customer eligibility for order $orderId")
+                log.info("[{} → validation-thread] Checking customer eligibility for order {}", threadName, orderId)
                 checkCustomerEligibility(order)
-                println("[$threadName → validation-thread] Customer check passed for order $orderId")
+                log.info("[{} → validation-thread] Customer check passed for order {}", threadName, orderId)
             } catch (e: Exception) {
                 failed.set(true)
                 failureReason.set("Customer check failed: ${e.message}")
@@ -68,9 +73,9 @@ class ValidationService(
         // Check 3: Price consistency
         validationExecutor.submit {
             try {
-                println("[$threadName → validation-thread] Checking price consistency for order $orderId")
+                log.info("[{} → validation-thread] Checking price consistency for order {}", threadName, orderId)
                 checkPriceConsistency(order)
-                println("[$threadName → validation-thread] Price check passed for order $orderId")
+                log.info("[{} → validation-thread] Price check passed for order {}", threadName, orderId)
             } catch (e: Exception) {
                 failed.set(true)
                 failureReason.set("Price check failed: ${e.message}")
@@ -80,9 +85,9 @@ class ValidationService(
         }
 
         // Wait for all 3 checks to complete
-        println("[$threadName] Waiting for all validation checks to complete...")
+        log.info("[{}] Waiting for all validation checks to complete...", threadName)
         latch.await()
-        println("[$threadName] All validation checks completed for order $orderId")
+        log.info("[{}] All validation checks completed for order {}", threadName, orderId)
 
         if (failed.get()) {
             throw IllegalStateException(failureReason.get())
