@@ -26,7 +26,8 @@ class OrderService(
         private val orderRepository: OrderRepository,
         private val productRepository: ProductRepository,
         private val stockService: StockService,
-        private val orderStatusCache: OrderStatusCache
+        private val orderStatusCache: OrderStatusCache,
+        private val paymentGatewayService: PaymentGatewayService
 ) {
 
     @Transactional
@@ -78,9 +79,14 @@ class OrderService(
         updateOrderStatusWithRetry(orderId, OrderStatus.VALIDATED)
         println("[$threadName] Order $orderId validated, stock reserved")
 
-        // --- Placeholder: PAYMENT_PROCESSING step (real logic comes in 2.5) ---
+        // --- Step: PAYMENT_PROCESSING — throttled via Semaphore ---
         updateOrderStatusWithRetry(orderId, OrderStatus.PAYMENT_PROCESSING)
-        Thread.sleep(1000)
+        val paymentSuccess = paymentGatewayService.processPayment(orderId)
+        if (!paymentSuccess) {
+            updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
+            println("[$threadName] Order $orderId payment failed")
+            return
+        }
         updateOrderStatusWithRetry(orderId, OrderStatus.PAID)
         println("[$threadName] Order $orderId paid")
 
