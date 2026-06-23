@@ -27,7 +27,8 @@ class OrderService(
         private val productRepository: ProductRepository,
         private val stockService: StockService,
         private val orderStatusCache: OrderStatusCache,
-        private val paymentGatewayService: PaymentGatewayService
+        private val paymentGatewayService: PaymentGatewayService,
+        private val validationService: ValidationService
 ) {
 
     @Transactional
@@ -70,8 +71,17 @@ class OrderService(
         // --- Placeholder: VALIDATING step (real logic comes in 2.6) ---
         updateOrderStatusWithRetry(orderId, OrderStatus.VALIDATING)
         try {
+            validationService.validateOrder(orderId)
+        } catch (e: Exception) {
+            updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
+            println("[$threadName] Order $orderId validation failed: ${e.message}")
+            return
+        }
+
+        try {
             stockService.reserveStock(orderId)
         } catch (e: InsufficientStockException) {
+            updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
             updateOrderStatus(orderId, OrderStatus.FAILED)
             println("[$threadName] Order $orderId failed: ${e.message}")
             return
