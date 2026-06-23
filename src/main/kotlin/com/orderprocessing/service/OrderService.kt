@@ -10,6 +10,7 @@ import com.orderprocessing.exception.ResourceNotFoundException
 import com.orderprocessing.exception.InsufficientStockException
 import com.orderprocessing.repository.OrderRepository
 import com.orderprocessing.repository.ProductRepository
+import com.orderprocessing.cache.OrderStatusCache
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -24,7 +25,8 @@ import java.util.UUID
 class OrderService(
         private val orderRepository: OrderRepository,
         private val productRepository: ProductRepository,
-        private val stockService: StockService
+        private val stockService: StockService,
+        private val orderStatusCache: OrderStatusCache
 ) {
 
     @Transactional
@@ -96,6 +98,7 @@ class OrderService(
         order.status = newStatus
         order.updatedAt = Instant.now()
         orderRepository.save(order)
+        orderStatusCache.update(orderId, newStatus)
     }
 
     fun updateOrderStatusWithRetry(orderId: UUID, newStatus: OrderStatus, maxRetries: Int = 3) {

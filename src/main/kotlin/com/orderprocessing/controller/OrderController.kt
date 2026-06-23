@@ -3,6 +3,7 @@ package com.orderprocessing.controller
 import com.orderprocessing.dto.CreateOrderRequest
 import com.orderprocessing.dto.OrderResponse
 import com.orderprocessing.service.OrderService
+import com.orderprocessing.cache.OrderStatusCache
 import jakarta.validation.Valid
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -20,7 +21,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/orders")
 class OrderController(
-        private val orderService: OrderService
+        private val orderService: OrderService,
+        private val orderStatusCache: OrderStatusCache
 ) {
 
     @PostMapping
@@ -50,5 +52,12 @@ class OrderController(
     fun cancelOrder(@PathVariable id: UUID): ResponseEntity<OrderResponse> {
         val response = orderService.cancelOrder(id)
         return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/{id}/status")
+    fun getOrderStatus(@PathVariable id: UUID): ResponseEntity<Map<String, String>> {
+        val status = orderStatusCache.get(id)
+                ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(mapOf("orderId" to id.toString(), "status" to status.name))
     }
 }
