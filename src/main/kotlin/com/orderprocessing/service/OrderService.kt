@@ -28,7 +28,8 @@ class OrderService(
         private val stockService: StockService,
         private val orderStatusCache: OrderStatusCache,
         private val paymentGatewayService: PaymentGatewayService,
-        private val validationService: ValidationService
+        private val validationService: ValidationService,
+        private val fulfillmentService: FulfillmentService
 ) {
 
     @Transactional
@@ -82,7 +83,6 @@ class OrderService(
             stockService.reserveStock(orderId)
         } catch (e: InsufficientStockException) {
             updateOrderStatusWithRetry(orderId, OrderStatus.FAILED)
-            updateOrderStatus(orderId, OrderStatus.FAILED)
             println("[$threadName] Order $orderId failed: ${e.message}")
             return
         }
@@ -100,11 +100,9 @@ class OrderService(
         updateOrderStatusWithRetry(orderId, OrderStatus.PAID)
         println("[$threadName] Order $orderId paid")
 
-        // --- Placeholder: FULFILLMENT step (real logic comes in 2.7) ---
-        updateOrderStatusWithRetry(orderId, OrderStatus.FULFILLMENT)
-        Thread.sleep(1000)
-        updateOrderStatusWithRetry(orderId, OrderStatus.SHIPPED)
-        println("[$threadName] Order $orderId shipped")
+        // --- Step: FULFILLMENT — submit to BlockingQueue pipeline ---
+        fulfillmentService.submitForFulfillment(orderId)
+        println("[$threadName] Order $orderId submitted to fulfillment pipeline")
     }
 
     @Transactional
